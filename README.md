@@ -1,5 +1,7 @@
 # dsh-onlyne
 
+English | [中文](README.zh.md)
+
 **Give DeepSeek Harness agents a real IM inbox/outbox through [Onlyne](https://github.com/dbydd/onlyne).**
 
 `dsh-onlyne` is the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) plugin for Onlyne, the workspace-local IM channel daemon. It adds model-facing tools and a watch loop so a dsh agent can receive messages from IM channels (Telegram, Feishu/Lark, QQ Bot, WeChat) and send replies — without pretending a chat platform is a terminal or a workflow engine.
