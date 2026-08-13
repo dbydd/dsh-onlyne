@@ -1,7 +1,7 @@
 {
   "name": "dsh-onlyne",
-  "version": "0.1.0",
-  "description": "DeepSeek Harness plugin: Onlyne IM inbox/outbox for dsh agents.",
+  "version": "0.1.1",
+  "description": "DeepSeek Harness plugin: an IM gateway that sends and receives QQ, WeChat, Feishu and Telegram messages from dsh agents.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
