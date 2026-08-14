@@ -13,6 +13,13 @@ export interface OnlyneRequest {
   limit?: number
 }
 
+export interface Attachment {
+  kind: 'image' | 'file' | 'video' | 'audio' | 'voice'
+  path?: string
+  url?: string
+  file_name?: string
+}
+
 export interface SendTarget {
   channelId: string
 }
@@ -130,11 +137,13 @@ export async function markConsumed(socketPath: string, messageId: string): Promi
   return request(socketPath, { id: `consume-${Date.now()}`, op: 'mark_io_consumed', message_id: messageId })
 }
 
-export async function sendWithRetry(socketPath: string, target: SendTarget, text: string, attempts: number, rawText = false): Promise<SendResult> {
+export async function sendWithRetry(socketPath: string, target: SendTarget, text: string, attempts: number, rawText = false, attachments: Attachment[] = []): Promise<SendResult> {
   let error = 'unknown error'
   for (let i = 0; i < Math.max(1, attempts); i++) {
     try {
-      const res = await request(socketPath, { id: `send-${Date.now()}-${i}`, op: 'send_message', channel_id: target.channelId, text, raw_text: rawText })
+      const payload: OnlyneRequest & { attachments?: Attachment[] } = { id: `send-${Date.now()}-${i}`, op: 'send_message', channel_id: target.channelId, text, raw_text: rawText }
+      if (attachments.length) payload.attachments = attachments
+      const res = await request(socketPath, payload)
       if (res.ok) return { ...target, ok: true }
       error = res.error?.message ?? JSON.stringify(res.error ?? res)
     } catch (e) { error = e instanceof Error ? e.message : String(e) }
