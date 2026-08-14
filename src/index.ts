@@ -20,7 +20,7 @@ import type {} from '@deepseek-ai/dsh-commands'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { ChildProcess } from 'node:child_process'
+import { exec, type ChildProcess } from 'node:child_process'
 import type { Socket } from 'node:net'
 import { inboundModeFor, loadConfig, saveConfig } from './config.js'
 import {
@@ -30,6 +30,7 @@ import {
   markConsumed,
   sendWithRetry,
   shutdownDaemon,
+  type Attachment,
   stopProcess,
   subscribe,
 } from './onlyne.js'
@@ -91,8 +92,29 @@ function needsReply(inbound = state.currentInbound) {
 function wakeAgent(ctx: Context, text: string): boolean {
   const agent = ctx.agents.list()[0]
   if (!agent) return false
-  agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
+  // steer() inserts at the next step boundary so a busy agent picks up
+  // inbound messages immediately instead of waiting for the current turn.
+  agent.steer(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
   return true
+}
+
+/** Fire-and-forget typing indicator toggle via config.typingCommand ('on'/'off'). */
+function typing(on: boolean) {
+  const cmd = currentConfig().typingCommand
+  if (!cmd) return
+  try { exec(`${cmd} ${on ? 'on' : 'off'}`) } catch { /* ignore */ }
+}
+
+/** Sustain the typing indicator while a turn is being processed (refreshed every 8s). */
+let typingTimer: ReturnType<typeof setInterval> | null = null
+function typingOn() {
+  typing(true)
+  if (typingTimer) clearInterval(typingTimer)
+  typingTimer = setInterval(() => typing(true), 8000)
+}
+function typingOff() {
+  if (typingTimer) { clearInterval(typingTimer); typingTimer = null }
+  typing(false)
 }
 
 function scheduleReconnect(ctx: Context) {
@@ -132,6 +154,7 @@ async function startWatch(ctx: Context) {
       if (inbound.text.trim() === '/handshake') { consumeIfNotified(inbound); return }
       state.currentInbound = { ...inbound, replied: false, noReply: false }
       if (mode === 'auto-handle') {
+        typingOn()
         wakeAgent(ctx, `Onlyne inbound message from ${inbound.channelId}/${inbound.conversationId}:\n\n${inbound.text}\n\nReply with onlyne_reply, or call onlyne_mark_no_reply if no reply is needed.`)
         consumeIfNotified(inbound)
       }
@@ -186,7 +209,7 @@ async function reply(text: string) {
   const inbound = state.currentInbound
   if (!inbound) throw new Error('no active inbound message')
   const res = await sendWithRetry(state.workspace.socketPath, { channelId: inbound.channelId }, text, currentConfig().outbound.retry.attempts)
-  if (res.ok) { inbound.replied = true; state.currentInbound = undefined }
+  if (res.ok) { inbound.replied = true; state.currentInbound = undefined; typingOff() }
   return res
 }
 
@@ -310,11 +333,23 @@ export function apply(ctx: Context) {
       channelId: { type: 'string', required: true, description: 'Channel id as configured in the Onlyne workspace.' },
       text: { type: 'string', required: true, description: 'Message body (Markdown unless rawText).' },
       rawText: { type: 'boolean', description: 'Send the text literally instead of as Markdown.' },
+      attachments: {
+        type: 'array',
+        description: 'Optional attachments. Each: { kind: "Image"|"File"|"Video"|"Audio"|"Voice", path: "/abs/path" (or url), file_name: "name.ext" }.',
+        items: { type: 'object', additionalProperties: true },
+      },
     },
     output: textOutput(),
     async execute(args) {
       if (!state.workspace) throw new Error('onlyne workspace not found')
-      const res = await sendWithRetry(state.workspace.socketPath, { channelId: args.channelId }, args.text, currentConfig().outbound.retry.attempts, args.rawText ?? false)
+      const attachments = (Array.isArray(args.attachments) ? args.attachments : []).map((a: any) => ({
+        kind: String(a.kind ?? 'file').toLowerCase() as Attachment['kind'],
+        path: a.path,
+        url: a.url,
+        file_name: a.file_name ?? a.fileName,
+      }))
+      const res = await sendWithRetry(state.workspace.socketPath, { channelId: args.channelId }, args.text, currentConfig().outbound.retry.attempts, args.rawText ?? false, attachments)
+      if (res && res.ok) typingOff()
       return JSON.stringify(res)
     },
   }))
@@ -372,6 +407,7 @@ export function apply(ctx: Context) {
       if (state.currentInbound) {
         state.currentInbound.noReply = true
         state.currentInbound = undefined
+        typingOff()
       }
       return JSON.stringify({ ok: true, reason: args.reason ?? null })
     },
