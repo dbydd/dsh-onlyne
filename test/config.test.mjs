@@ -26,7 +26,7 @@ test('connectDaemon can require an already running workspace daemon', async () =
   const dir = mkdtempSync(join(tmpdir(), 'dsh-onlyne-'));
   try {
     await assert.rejects(
-      connectDaemon({ root: dir, onlyneDir: join(dir, '.onlyne'), socketPath: join(dir, '.onlyne/run/onlyne.sock') }, false),
+      connectDaemon({ root: dir, onlyneDir: join(dir, '.onlyne'), socketPath: join(dir, '.onlyne/run/s') }, false),
       /onlyne daemon is not running/
     );
   } finally { rmSync(dir, { recursive: true, force: true }); }
