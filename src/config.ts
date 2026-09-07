@@ -18,6 +18,8 @@ export interface OnlyneConfig {
     guardedExplicit: { reminders: number; noOutputFallbackText: string }
     retry: { attempts: number; concurrency: number }
   }
+  /** Optional shell command invoked with 'on'/'off' to toggle a channel's typing indicator. */
+  typingCommand?: string
 }
 
 export const defaultConfig: OnlyneConfig = {
